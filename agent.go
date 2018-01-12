@@ -16,11 +16,11 @@ import (
 	"runtime"
 	"sync"
 	"syscall"
-	"time"
 
 	pb "github.com/kata-containers/agent/protocols/grpc"
 	"github.com/opencontainers/runc/libcontainer"
 	"github.com/opencontainers/runc/libcontainer/configs"
+	_ "github.com/opencontainers/runc/libcontainer/nsenter"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
 	"google.golang.org/grpc"
@@ -320,7 +320,7 @@ func (s *sandbox) setSubreaper() error {
 }
 
 func (s *sandbox) initLogger() error {
-	agentLog.Logger.Formatter = &logrus.TextFormatter{TimestampFormat: time.RFC3339Nano}
+//	agentLog.Logger.Formatter = &logrus.TextFormatter{TimestampFormat: time.RFC3339Nano}
 
 	config := newConfig(defaultLogLevel)
 	if err := config.getConfig(kernelCmdlineFile); err != nil {

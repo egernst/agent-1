@@ -75,6 +75,11 @@ func mount(source, destination, fsType string, flags int, options string) error 
 		}
 	} else {
 		absSource = source
+
+		if err := os.MkdirAll(destination, mountPerm); err != nil {
+			return fmt.Errorf("could not create destination directory: %v",
+				destination)
+		}
 	}
 
 	if err := syscall.Mount(absSource, destination,

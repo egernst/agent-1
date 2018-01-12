@@ -283,10 +283,14 @@ func (a *agentGRPC) runProcess(cid, execID string, agentProcess *pb.Process) (er
 		return fmt.Errorf("Sandbox not started")
 	}
 
+	agentLog.Infof("### runProcess 1: containerId %q", cid)
+
 	ctr, err := a.sandbox.getContainer(cid)
 	if err != nil {
 		return err
 	}
+
+	agentLog.Info("### runProcess 2")
 
 	status, err := ctr.container.Status()
 	if err != nil {
@@ -304,11 +308,12 @@ func (a *agentGRPC) runProcess(cid, execID string, agentProcess *pb.Process) (er
 			return err
 		}
 	} else {
-		if status != libcontainer.Created {
-			return fmt.Errorf("Container %s status %s, should be %s", cid, status.String(), libcontainer.Created.String())
+		if status != libcontainer.Created && status != libcontainer.Stopped {
+			return fmt.Errorf("Container %s status %s, should be %s or %s", cid, status.String(), libcontainer.Created.String(), libcontainer.Stopped.String())
 		}
 
 		proc = ctr.initProcess
+		execID = proc.id
 	}
 
 	// This lock is very important to avoid any race with reaper.reap().
@@ -416,6 +421,8 @@ func (a *agentGRPC) updateContainerConfig(spec *specs.Spec, config *configs.Conf
 }
 
 func (a *agentGRPC) CreateContainer(ctx context.Context, req *pb.CreateContainerRequest) (*gpb.Empty, error) {
+	agentLog.Info("### CreateContainer 1")
+
 	if a.sandbox.running == false {
 		return emptyResp, fmt.Errorf("Sandbox not started, impossible to run a new container")
 	}
@@ -457,6 +464,127 @@ func (a *agentGRPC) CreateContainer(ctx context.Context, req *pb.CreateContainer
 		return emptyResp, err
 	}
 
+	// HACK
+	config.Namespaces = configs.Namespaces([]configs.Namespace{
+		{Type: configs.NEWNS},
+		{Type: configs.NEWUTS},
+		{Type: configs.NEWIPC},
+		{Type: configs.NEWPID},
+	})
+	config.Networks = []*configs.Network{}
+	config.Mounts = []*configs.Mount{
+		{
+			Source:      "proc",
+			Destination: "/proc",
+			Device:      "proc",
+			Flags:       defaultMountFlags,
+		},
+		{
+			Source:      "tmpfs",
+			Destination: "/dev",
+			Device:      "tmpfs",
+			Flags:       unix.MS_NOSUID | unix.MS_STRICTATIME,
+			Data:        "mode=755",
+		},
+		{
+			Source:      "devpts",
+			Destination: "/dev/pts",
+			Device:      "devpts",
+			Flags:       syscall.MS_NOSUID | syscall.MS_NOEXEC,
+			Data:        "newinstance,ptmxmode=0666,mode=0620,gid=5",
+		},
+		{
+			Device:      "tmpfs",
+			Source:      "shm",
+			Destination: "/dev/shm",
+			Data:        "mode=1777,size=65536k",
+			Flags:       defaultMountFlags,
+		},
+		{
+			Source:      "mqueue",
+			Destination: "/dev/mqueue",
+			Device:      "mqueue",
+			Flags:       defaultMountFlags,
+		},
+		{
+			Source:      "sysfs",
+			Destination: "/sys",
+			Device:      "sysfs",
+			Flags:       defaultMountFlags,
+		},
+	}
+	config.NoNewKeyring = true
+	config.Seccomp = nil
+	config.Hooks = nil
+/*
+	defaultMountFlags := syscall.MS_NOEXEC | syscall.MS_NOSUID | syscall.MS_NODEV
+	config := &configs.Config{
+		Rootfs: config1.Rootfs,
+		Capabilities: &configs.Capabilities{
+			Bounding:    defaultCapsList,
+			Effective:   defaultCapsList,
+			Inheritable: defaultCapsList,
+			Permitted:   defaultCapsList,
+			Ambient:     defaultCapsList,
+		},
+		Namespaces: configs.Namespaces([]configs.Namespace{
+			{Type: configs.NEWNS},
+			{Type: configs.NEWUTS},
+			{Type: configs.NEWIPC},
+			{Type: configs.NEWPID},
+		}),
+		Cgroups: &configs.Cgroup{
+			Name:   req.ContainerId,
+			Parent: "system",
+			Resources: &configs.Resources{
+				MemorySwappiness: nil,
+				AllowAllDevices:  nil,
+				AllowedDevices:   configs.DefaultAllowedDevices,
+			},
+		},
+		Devices: configs.DefaultAutoCreatedDevices,
+
+		Hostname: config1.Hostname,
+		Mounts: []*configs.Mount{
+			{
+				Source:      "proc",
+				Destination: "/proc",
+				Device:      "proc",
+				Flags:       defaultMountFlags,
+			},
+			{
+				Source:      "devpts",
+				Destination: "/dev/pts",
+				Device:      "devpts",
+				Flags:       syscall.MS_NOSUID | syscall.MS_NOEXEC,
+				Data:        "newinstance,ptmxmode=0666,mode=0620,gid=5",
+			},
+			{
+				Device:      "tmpfs",
+				Source:      "shm",
+				Destination: "/dev/shm",
+				Data:        "mode=1777,size=65536k",
+				Flags:       defaultMountFlags,
+			},
+			{
+				Source:      "mqueue",
+				Destination: "/dev/mqueue",
+				Device:      "mqueue",
+				Flags:       defaultMountFlags,
+			},
+			{
+				Source:      "sysfs",
+				Destination: "/sys",
+				Device:      "sysfs",
+				Flags:       defaultMountFlags,
+			},
+		},
+
+		NoNewKeyring:    true,
+		NoNewPrivileges: true,
+	}
+*/
+
 	containerPath := filepath.Join("/tmp/libcontainer", a.sandbox.id)
 	factory, err := libcontainer.New(containerPath, libcontainer.Cgroupfs)
 	if err != nil {
@@ -484,10 +612,13 @@ func (a *agentGRPC) CreateContainer(ctx context.Context, req *pb.CreateContainer
 
 	a.sandbox.setContainer(req.ContainerId, container)
 
+	agentLog.Infof("### CreateContainer: containerId %q", req.ContainerId)
+
 	return emptyResp, nil
 }
 
 func (a *agentGRPC) StartContainer(ctx context.Context, req *pb.StartContainerRequest) (*gpb.Empty, error) {
+	agentLog.Info("### StartContainer 1")
 	if err := a.runProcess(req.ContainerId, "", nil); err != nil {
 		return emptyResp, err
 	}
@@ -496,6 +627,8 @@ func (a *agentGRPC) StartContainer(ctx context.Context, req *pb.StartContainerRe
 }
 
 func (a *agentGRPC) ExecProcess(ctx context.Context, req *pb.ExecProcessRequest) (*gpb.Empty, error) {
+	agentLog.Info("### ExecProcess 1")
+
 	if err := a.runProcess(req.ContainerId, req.ExecId, req.Process); err != nil {
 		return emptyResp, err
 	}
@@ -504,6 +637,8 @@ func (a *agentGRPC) ExecProcess(ctx context.Context, req *pb.ExecProcessRequest)
 }
 
 func (a *agentGRPC) SignalProcess(ctx context.Context, req *pb.SignalProcessRequest) (*gpb.Empty, error) {
+	agentLog.Info("### SignalProcess 1")
+
 	if a.sandbox.running == false {
 		return emptyResp, fmt.Errorf("Sandbox not started, impossible to signal the container")
 	}
@@ -526,6 +661,8 @@ func (a *agentGRPC) SignalProcess(ctx context.Context, req *pb.SignalProcessRequ
 			"sandbox":     a.sandbox.id,
 			"signal":      signal.String(),
 		}).Info("discarding signal as container stopped")
+
+		return emptyResp, nil
 	}
 
 	// If the exec ID provided is empty, let's apply the signal to all
@@ -551,6 +688,8 @@ func (a *agentGRPC) SignalProcess(ctx context.Context, req *pb.SignalProcessRequ
 }
 
 func (a *agentGRPC) WaitProcess(ctx context.Context, req *pb.WaitProcessRequest) (*pb.WaitProcessResponse, error) {
+	agentLog.Info("### WaitProcess 1")
+
 	proc, ctr, err := a.sandbox.getRunningProcess(req.ContainerId, req.ExecId)
 	if err != nil {
 		return &pb.WaitProcessResponse{}, err
@@ -574,6 +713,8 @@ func (a *agentGRPC) WaitProcess(ctx context.Context, req *pb.WaitProcessRequest)
 }
 
 func (a *agentGRPC) RemoveContainer(ctx context.Context, req *pb.RemoveContainerRequest) (*gpb.Empty, error) {
+	agentLog.Info("### RemoveContainer 1")
+
 	ctr, err := a.sandbox.getContainer(req.ContainerId)
 	if err != nil {
 		return emptyResp, err
@@ -614,6 +755,8 @@ func (a *agentGRPC) RemoveContainer(ctx context.Context, req *pb.RemoveContainer
 }
 
 func (a *agentGRPC) WriteStdin(ctx context.Context, req *pb.WriteStreamRequest) (*pb.WriteStreamResponse, error) {
+	agentLog.Info("### WriteStdin 1")
+
 	proc, _, err := a.sandbox.getRunningProcess(req.ContainerId, req.ExecId)
 	if err != nil {
 		return &pb.WriteStreamResponse{}, err
@@ -637,6 +780,8 @@ func (a *agentGRPC) WriteStdin(ctx context.Context, req *pb.WriteStreamRequest) 
 }
 
 func (a *agentGRPC) ReadStdout(ctx context.Context, req *pb.ReadStreamRequest) (*pb.ReadStreamResponse, error) {
+	agentLog.Info("### ReadStdout 1")
+
 	data, err := a.sandbox.readStdio(req.ContainerId, req.ExecId, int(req.Len), true)
 	if err != nil {
 		return &pb.ReadStreamResponse{}, err
@@ -648,6 +793,8 @@ func (a *agentGRPC) ReadStdout(ctx context.Context, req *pb.ReadStreamRequest) (
 }
 
 func (a *agentGRPC) ReadStderr(ctx context.Context, req *pb.ReadStreamRequest) (*pb.ReadStreamResponse, error) {
+	agentLog.Info("### ReadStderr 1")
+
 	data, err := a.sandbox.readStdio(req.ContainerId, req.ExecId, int(req.Len), false)
 	if err != nil {
 		return &pb.ReadStreamResponse{}, err
@@ -659,6 +806,8 @@ func (a *agentGRPC) ReadStderr(ctx context.Context, req *pb.ReadStreamRequest) (
 }
 
 func (a *agentGRPC) CloseStdin(ctx context.Context, req *pb.CloseStdinRequest) (*gpb.Empty, error) {
+	agentLog.Info("### CloseStdin 1")
+
 	proc, _, err := a.sandbox.getRunningProcess(req.ContainerId, req.ExecId)
 	if err != nil {
 		return emptyResp, err
@@ -679,6 +828,8 @@ func (a *agentGRPC) CloseStdin(ctx context.Context, req *pb.CloseStdinRequest) (
 }
 
 func (a *agentGRPC) TtyWinResize(ctx context.Context, req *pb.TtyWinResizeRequest) (*gpb.Empty, error) {
+	agentLog.Info("### TtyWinResize 1")
+
 	proc, _, err := a.sandbox.getRunningProcess(req.ContainerId, req.ExecId)
 	if err != nil {
 		return emptyResp, err
@@ -702,6 +853,8 @@ func (a *agentGRPC) TtyWinResize(ctx context.Context, req *pb.TtyWinResizeReques
 }
 
 func (a *agentGRPC) CreateSandbox(ctx context.Context, req *pb.CreateSandboxRequest) (*gpb.Empty, error) {
+	agentLog.Info("### CreateSandbox 1")
+
 	if a.sandbox.running == true {
 		return emptyResp, fmt.Errorf("Sandbox already started, impossible to start again")
 	}
@@ -732,6 +885,8 @@ func (a *agentGRPC) CreateSandbox(ctx context.Context, req *pb.CreateSandboxRequ
 }
 
 func (a *agentGRPC) DestroySandbox(ctx context.Context, req *pb.DestroySandboxRequest) (*gpb.Empty, error) {
+	agentLog.Info("### DestroySandbox 1")
+
 	if a.sandbox.running == false {
 		agentLog.WithField("sandbox", a.sandbox.id).Info("Sandbox not started, this is a no-op")
 		return emptyResp, nil
@@ -773,6 +928,8 @@ func (a *agentGRPC) DestroySandbox(ctx context.Context, req *pb.DestroySandboxRe
 }
 
 func (a *agentGRPC) AddInterface(ctx context.Context, req *pb.AddInterfaceRequest) (*gpb.Empty, error) {
+	agentLog.Info("### AddInterface 1")
+
 	if err := a.sandbox.addInterface(nil, req.Interface); err != nil {
 		return emptyResp, err
 	}
@@ -781,6 +938,8 @@ func (a *agentGRPC) AddInterface(ctx context.Context, req *pb.AddInterfaceReques
 }
 
 func (a *agentGRPC) RemoveInterface(ctx context.Context, req *pb.RemoveInterfaceRequest) (*gpb.Empty, error) {
+	agentLog.Info("### RemoveInterface 1")
+
 	if err := a.sandbox.removeInterface(nil, req.Name); err != nil {
 		return emptyResp, err
 	}
@@ -789,6 +948,8 @@ func (a *agentGRPC) RemoveInterface(ctx context.Context, req *pb.RemoveInterface
 }
 
 func (a *agentGRPC) UpdateInterface(ctx context.Context, req *pb.UpdateInterfaceRequest) (*gpb.Empty, error) {
+	agentLog.Info("### UpdateInterface 1")
+
 	if err := a.sandbox.updateInterface(nil, req.Interface, req.Type); err != nil {
 		return emptyResp, err
 	}
@@ -797,6 +958,8 @@ func (a *agentGRPC) UpdateInterface(ctx context.Context, req *pb.UpdateInterface
 }
 
 func (a *agentGRPC) AddRoute(ctx context.Context, req *pb.RouteRequest) (*gpb.Empty, error) {
+	agentLog.Info("### AddRoute 1")
+
 	if err := a.sandbox.addRoute(nil, req.Route); err != nil {
 		return emptyResp, err
 	}
@@ -805,6 +968,8 @@ func (a *agentGRPC) AddRoute(ctx context.Context, req *pb.RouteRequest) (*gpb.Em
 }
 
 func (a *agentGRPC) RemoveRoute(ctx context.Context, req *pb.RouteRequest) (*gpb.Empty, error) {
+	agentLog.Info("### RemoveRoute 1")
+
 	if err := a.sandbox.removeRoute(nil, req.Route); err != nil {
 		return emptyResp, err
 	}
@@ -813,6 +978,8 @@ func (a *agentGRPC) RemoveRoute(ctx context.Context, req *pb.RouteRequest) (*gpb
 }
 
 func (a *agentGRPC) OnlineCPUMem(ctx context.Context, req *pb.OnlineCPUMemRequest) (*gpb.Empty, error) {
+	agentLog.Info("### OnlineCPUMem 1")
+
 	go onlineCPUMem()
 
 	return emptyResp, nil
