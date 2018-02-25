@@ -331,6 +331,7 @@ func (s *sandbox) updateRoutes(netHandle *netlink.Handle, requestedRoutes *pb.Ro
 	// won't be able to access the gateway
 	for _, reqRoute := range requestedRoutes.Routes {
 		if reqRoute.Gateway == "" {
+			agentLog.Info("Inside setting a route... %+v", reqRoute)
 			err = s.updateRoute(netHandle, reqRoute, true)
 			if err != nil {
 				agentLog.WithError(err).Error("update Route failed")
@@ -344,6 +345,7 @@ func (s *sandbox) updateRoutes(netHandle *netlink.Handle, requestedRoutes *pb.Ro
 	// Take a second pass and apply the routes which include a gateway
 	for _, reqRoute := range requestedRoutes.Routes {
 		if reqRoute.Gateway != "" {
+			agentLog.Info("gateway condition: Inside setting a route... %+v", reqRoute)
 			err = s.updateRoute(netHandle, reqRoute, true)
 			if err != nil {
 				agentLog.WithError(err).Error("update Route failed")
@@ -370,12 +372,18 @@ func getCurrentRoutes(netHandle *netlink.Handle) (*pb.Routes, error) {
 
 	var routes pb.Routes
 
-	finalRouteList, err := netHandle.RouteList(nil, netlink.FAMILY_ALL)
+	//finalRouteList, err := netHandle.RouteList(nil, netlink.FAMILY_ALL)
+	finalRouteList, err := netHandle.RouteListFiltered(netlink.FAMILY_ALL, nil, netlink.RT_FILTER_TABLE)
 	if err != nil {
 		return &routes, err
 	}
 
+	agentLog.WithFields(logrus.Fields{
+		"routelist": finalRouteList,
+	}).Info("dump of current route")
+
 	for _, route := range finalRouteList {
+		agentLog.Info("Looks like we 't hit the loop...")
 		var r pb.Route
 		if route.Dst != nil {
 			r.Dest = route.Dst.String()
@@ -390,6 +398,7 @@ func getCurrentRoutes(netHandle *netlink.Handle) (*pb.Routes, error) {
 		}
 
 		r.Scope = uint32(route.Scope)
+		r.Table = int32(route.Table)
 
 		link, err := netHandle.LinkByIndex(route.LinkIndex)
 		if err != nil {
@@ -450,20 +459,19 @@ func (s *sandbox) updateRoute(netHandle *netlink.Handle, route *pb.Route, add bo
 		Src:       net.ParseIP(route.Source),
 		Gw:        net.ParseIP(route.Gateway),
 		Scope:     netlink.Scope(route.Scope),
+		Table:     int(route.Table),
 	}
 
 	if add {
 		if err := netHandle.RouteAdd(netRoute); err != nil {
-			return fmt.Errorf("Could not add route dest(%s)/gw(%s)/dev(%s): %v",
-				route.Dest, route.Gateway, route.Device, err)
+			return fmt.Errorf("Could not add route %+v: %v", route, err)
 		}
 
 		// Add route to sandbox route list.
 		s.network.routes = append(s.network.routes, route)
 	} else {
 		if err := netHandle.RouteDel(netRoute); err != nil {
-			return fmt.Errorf("Could not remove route dest(%s)/gw(%s)/dev(%s): %v",
-				route.Dest, route.Gateway, route.Device, err)
+			return fmt.Errorf("Could not remove route %+v: %v", route, err)
 		}
 
 		// Remove route from sandbox route list.

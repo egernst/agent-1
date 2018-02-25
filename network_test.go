@@ -149,8 +149,8 @@ func TestUpdateRoutes(t *testing.T) {
 
 	//Test a simple route setup:
 	inputRoutesSimple := []*pb.Route{
-		{Dest: "", Gateway: "192.168.0.1", Source: "", Scope: 0, Device: "ifc-name"},
-		{Dest: "192.168.0.0/16", Gateway: "", Source: "192.168.0.2", Scope: 253, Device: "ifc-name"},
+		{Dest: "", Gateway: "192.168.0.1", Source: "", Scope: 0, Device: "ifc-name", Table: 1},
+		{Dest: "192.168.0.0/16", Gateway: "", Source: "192.168.0.2", Scope: 253, Device: "ifc-name", Table: 1},
 	}
 
 	testRoutes := &pb.Routes{
@@ -164,9 +164,9 @@ func TestUpdateRoutes(t *testing.T) {
 
 	//Test a route setup mimicking what could be provided by PTP CNI plugin:
 	inputRoutesPTPExample := []*pb.Route{
-		{Dest: "", Gateway: "192.168.0.1", Source: "", Scope: 0, Device: "ifc-name"},
-		{Dest: "192.168.0.144/16", Gateway: "192.168.0.1", Source: "192.168.0.2", Scope: 0, Device: "ifc-name"},
-		{Dest: "192.168.0.1/32", Gateway: "", Source: "192.168.0.2", Scope: 254, Device: "ifc-name"},
+		{Dest: "", Gateway: "192.168.0.1", Source: "", Scope: 0, Device: "ifc-name", Table: 27},
+		{Dest: "192.168.0.144/16", Gateway: "192.168.0.1", Source: "192.168.0.2", Scope: 0, Device: "ifc-name", Table: 27},
+		{Dest: "192.168.0.1/32", Gateway: "", Source: "192.168.0.2", Scope: 254, Device: "ifc-name", Table: 27},
 	}
 	testRoutes.Routes = inputRoutesPTPExample
 
@@ -177,13 +177,18 @@ func TestUpdateRoutes(t *testing.T) {
 
 	//Test unreachable example (no scope provided for initial link route)
 	inputRoutesNoScope := []*pb.Route{
-		{Dest: "", Gateway: "192.168.0.1", Source: "", Scope: 0, Device: "ifc-name"},
+		{Dest: "", Gateway: "192.168.0.1", Source: "", Scope: 0, Device: "ifc-name", Table: 4},
+		{Dest: "192.168.0.0/16", Gateway: "", Source: "192.168.0.2", Scope: 0, Device: "ifc-name", Table: 4},
+	}
+	expectedRouteResult := []*pb.Route{
 		{Dest: "192.168.0.0/16", Gateway: "", Source: "192.168.0.2", Scope: 0, Device: "ifc-name"},
 	}
+
 	testRoutes.Routes = inputRoutesNoScope
 	results, err = s.updateRoutes(netHandle, testRoutes)
-	assert.NotNil(t, err, "Expected to observe unreachable route failure")
+	testRoutes.Routes = expectedRouteResult
 
-	assert.True(t, reflect.DeepEqual(results.Routes[0], testRoutes.Routes[1]),
-		"Interface created didn't match: got %+v, expecting %+v", results.Routes[0], testRoutes.Routes[1])
+	assert.NotNil(t, err, "Expected to observe unreachable route failure")
+	assert.True(t, reflect.DeepEqual(results, testRoutes),
+		"Interface created didn't match: got %+v, expecting %+v", results, testRoutes)
 }

@@ -531,6 +531,7 @@ func (h *Handle) RouteListFiltered(family int, filter *Route, filterMask uint64)
 		return nil, err
 	}
 
+	fmt.Println("Wahoo we got past the initial bit")
 	var res []Route
 	for _, m := range msgs {
 		msg := nl.DeserializeRtMsg(m)
@@ -540,6 +541,7 @@ func (h *Handle) RouteListFiltered(family int, filter *Route, filterMask uint64)
 		}
 		if msg.Table != unix.RT_TABLE_MAIN {
 			if filter == nil || filter != nil && filterMask&RT_FILTER_TABLE == 0 {
+				fmt.Println("are we going to escape non main tables?")
 				// Ignore non-main tables
 				continue
 			}
@@ -551,6 +553,7 @@ func (h *Handle) RouteListFiltered(family int, filter *Route, filterMask uint64)
 		if filter != nil {
 			switch {
 			case filterMask&RT_FILTER_TABLE != 0 && filter.Table != unix.RT_TABLE_UNSPEC && route.Table != filter.Table:
+				fmt.Println("Fuck, looks like we hit the mask bit...")
 				continue
 			case filterMask&RT_FILTER_PROTOCOL != 0 && route.Protocol != filter.Protocol:
 				continue
@@ -576,6 +579,7 @@ func (h *Handle) RouteListFiltered(family int, filter *Route, filterMask uint64)
 				}
 			}
 		}
+		fmt.Println("Fuck, looks like we will appen")
 		res = append(res, route)
 	}
 	return res, nil
