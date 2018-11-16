@@ -2,6 +2,14 @@
 
 
 [[projects]]
+  branch = "master"
+  digest = "1:8ecb89af7dfe3ac401bdb0c9390b134ef96a97e85f732d2b0604fb7b3977839f"
+  name = "github.com/codahale/hdrhistogram"
+  packages = ["."]
+  pruneopts = "NUT"
+  revision = "3a0bb77429bd3a61596f5e8a3172445844342120"
+
+[[projects]]
   digest = "1:f366457ff35859c2de7fb1e7c0842595d55aa362c6174259f58a3cbf4cb7c727"
   name = "github.com/containerd/console"
   packages = ["."]
@@ -100,19 +108,6 @@
   packages = ["."]
   pruneopts = "NUT"
   revision = "cc6d2ea263b2471faabce371255777a365bf8306"
-
-[[projects]]
-  branch = "master"
-  digest = "1:14dbca697f2f73a9c950d916b9b1299b3fabc4668a1b443a342e4df23466de41"
-  name = "github.com/kata-containers/agent"
-  packages = [
-    "pkg/types",
-    "pkg/uevent",
-    "protocols/grpc",
-    "protocols/mockserver",
-  ]
-  pruneopts = "NUT"
-  revision = "3bef6122c307bf1e562d5c645f45fb4bb66d8053"
 
 [[projects]]
   digest = "1:0159dcdabe50788e5dcfb469521f8f8dcd362db3ab6b465b99a3d33a90726fc0"
@@ -230,6 +225,40 @@
   packages = ["capability"]
   pruneopts = "NUT"
   revision = "db04d3cc01c8b54962a58ec7e491717d06cfcc16"
+
+[[projects]]
+  digest = "1:87dee780f88f86f300bbd90116e933347cf4a3c65c1960072d412597a8896d50"
+  name = "github.com/uber/jaeger-client-go"
+  packages = [
+    ".",
+    "config",
+    "internal/baggage",
+    "internal/baggage/remote",
+    "internal/spanlog",
+    "internal/throttler",
+    "internal/throttler/remote",
+    "log",
+    "rpcmetrics",
+    "thrift",
+    "thrift-gen/agent",
+    "thrift-gen/baggage",
+    "thrift-gen/jaeger",
+    "thrift-gen/sampling",
+    "thrift-gen/zipkincore",
+    "transport",
+    "utils",
+  ]
+  pruneopts = "NUT"
+  revision = "1a782e2da844727691fef1757c72eb190c2909f0"
+  version = "v2.15.0"
+
+[[projects]]
+  digest = "1:0f09db8429e19d57c8346ad76fbbc679341fa86073d3b8fb5ac919f0357d8f4c"
+  name = "github.com/uber/jaeger-lib"
+  packages = ["metrics"]
+  pruneopts = "NUT"
+  revision = "ed3a127ec5fef7ae9ea95b01b542c47fbd999ce5"
+  version = "v1.5.0"
 
 [[projects]]
   digest = "1:2102a6328eb29d39c528696fe92fb347d5bc5a10b181ced1f80ffaabec45d538"
@@ -354,10 +383,6 @@
     "github.com/gogo/protobuf/types",
     "github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc",
     "github.com/hashicorp/yamux",
-    "github.com/kata-containers/agent/pkg/types",
-    "github.com/kata-containers/agent/pkg/uevent",
-    "github.com/kata-containers/agent/protocols/grpc",
-    "github.com/kata-containers/agent/protocols/mockserver",
     "github.com/mdlayher/vsock",
     "github.com/opencontainers/runc/libcontainer",
     "github.com/opencontainers/runc/libcontainer/cgroups",
@@ -370,6 +395,7 @@
     "github.com/opentracing/opentracing-go",
     "github.com/sirupsen/logrus",
     "github.com/stretchr/testify/assert",
+    "github.com/uber/jaeger-client-go/config",
     "github.com/vishvananda/netlink",
     "github.com/vishvananda/netns",
     "golang.org/x/net/context",

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017 Intel Corporation
+// Copyright (c) 2017-2018 Intel Corporation
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -594,7 +594,7 @@ func (a *agentGRPC) CreateContainer(ctx context.Context, req *pb.CreateContainer
 	// After all those storages have been processed, no matter the order
 	// here, the agent will rely on libcontainer (using the oci.Mounts
 	// list) to bind mount all of them inside the container.
-	mountList, err := addStorages(req.Storages, a.sandbox)
+	mountList, err := addStorages(ctx, req.Storages, a.sandbox)
 	if err != nil {
 		return emptyResp, err
 	}
@@ -604,9 +604,10 @@ func (a *agentGRPC) CreateContainer(ctx context.Context, req *pb.CreateContainer
 		processes:       make(map[string]*process),
 		mounts:          mountList,
 		useSandboxPidNs: req.SandboxPidns,
+		ctx:             ctx,
 	}
 
-	a.sandbox.setContainer(req.ContainerId, ctr)
+	a.sandbox.setContainer(ctx, req.ContainerId, ctr)
 
 	// In case the container creation failed, make sure we cleanup
 	// properly by rolling back the actions previously performed.
@@ -806,6 +807,16 @@ func (a *agentGRPC) SignalProcess(ctx context.Context, req *pb.SignalProcessRequ
 func (a *agentGRPC) WaitProcess(ctx context.Context, req *pb.WaitProcessRequest) (*pb.WaitProcessResponse, error) {
 	proc, ctr, err := a.sandbox.getProcess(req.ContainerId, req.ExecId)
 	if err != nil {
+		// The workload process no longer exists so trigger a shutdown of
+		// the gRPC server and thus the agent.
+		//
+		// Note: A more logical location for this call is in
+		// DestroySandbox(). However that fails to work as expected:
+		// the gRPC server is never stopped and blocks on an internal
+		// WaitGroup. There may be a limitation of the package whereby
+		// the goroutine running the server cannot stop itself.
+		a.requestServerStop()
+
 		return &pb.WaitProcessResponse{}, err
 	}
 
@@ -1231,7 +1242,7 @@ func (a *agentGRPC) CreateSandbox(ctx context.Context, req *pb.CreateSandboxRequ
 	}
 
 	// Set up shared UTS and IPC namespaces
-	if err := a.sandbox.setupSharedNamespaces(); err != nil {
+	if err := a.sandbox.setupSharedNamespaces(ctx); err != nil {
 		return emptyResp, err
 	}
 
@@ -1241,7 +1252,7 @@ func (a *agentGRPC) CreateSandbox(ctx context.Context, req *pb.CreateSandboxRequ
 		}
 	}
 
-	mountList, err := addStorages(req.Storages, a.sandbox)
+	mountList, err := addStorages(ctx, req.Storages, a.sandbox)
 	if err != nil {
 		return emptyResp, err
 	}
@@ -1253,6 +1264,33 @@ func (a *agentGRPC) CreateSandbox(ctx context.Context, req *pb.CreateSandboxRequ
 	}
 
 	return emptyResp, nil
+}
+
+// flushAll flushes all system journal data.
+func flushAll() error {
+	args := []string{"journalctl", "--flush", "--sync"}
+
+	cmd := exec.Command(args[0], args[1:]...)
+
+	return cmd.Run()
+}
+
+// requestServerStop asks the goroutine that started the server goroutine
+// to end the gRPC server.
+func (a *agentGRPC) requestServerStop() {
+	// Synchronize the caches on the system. This is needed to ensure
+	// there is no pending transactions left before the VM is shut down.
+	syscall.Sync()
+
+	if tracing {
+		err := flushAll()
+		if err != nil {
+			agentLog.WithError(err).Warn("failed to flush")
+		}
+	}
+
+	// Inform the caller the server should end
+	a.sandbox.shutdown <- true
 }
 
 func (a *agentGRPC) DestroySandbox(ctx context.Context, req *pb.DestroySandboxRequest) (*gpb.Empty, error) {
@@ -1303,10 +1341,6 @@ func (a *agentGRPC) DestroySandbox(ctx context.Context, req *pb.DestroySandboxRe
 	a.sandbox.network = network{}
 	a.sandbox.mounts = []string{}
 	a.sandbox.storages = make(map[string]*sandboxStorage)
-
-	// Synchronize the caches on the system. This is needed to ensure
-	// there is no pending transactions left before the VM is shut down.
-	syscall.Sync()
 
 	return emptyResp, nil
 }

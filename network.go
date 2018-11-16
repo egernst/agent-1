@@ -640,6 +640,9 @@ func (s *sandbox) removeNetwork() error {
 
 // Bring up localhost network interface.
 func (s *sandbox) handleLocalhost() error {
+	span, _ := s.trace("handleLocalhost")
+	defer span.Finish()
+
 	// If not running as the init daemon, there is nothing to do as the
 	// localhost interface will already exist.
 	if os.Getpid() != 1 {
