@@ -4,6 +4,10 @@
 #
 
 TARGET = kata-agent
+
+# systemd service name
+AGENT_SERVICE = $(TARGET).service
+
 SOURCES := $(shell find . 2>&1 | grep -E '.*\.go$$')
 
 DESTDIR :=
@@ -18,7 +22,7 @@ GENERATED_FILES :=
 
 ifeq ($(INIT),no)
 # Unit file to start kata agent in systemd systems
-UNIT_FILES = kata-agent.service
+UNIT_FILES = $(AGENT_SERVICE)
 GENERATED_FILES := $(UNIT_FILES)
 # Target to be reached in systemd services
 UNIT_FILES += kata-containers.target
