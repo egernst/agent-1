@@ -15,6 +15,25 @@ PREFIX := /usr
 BINDIR := $(PREFIX)/bin
 # Define if agent will be installed as init
 INIT := no
+
+# Set to "yes" if agent should support OpenTracing with http://jaegertracing.io.
+TRACE := no
+
+# Tracing cannot currently be supported when running the agent as PID 1 since
+# the tracing requires additional services to be started _before_ the agent
+# process starts.
+#
+# These services are required since Jaeger does not currently support VSOCK.
+# Once Jaeger does support VSOCK, this limitation can be removed as the
+# additional services will no longer be required.
+#
+# See TRACING.md for further details.
+ifeq ($(TRACE),yes)
+  ifeq ($(INIT),yes)
+    $(error ERROR: "TRACE=yes" requires "INIT=no")
+  endif
+endif
+
 # Path to systemd unit directory if installed as not init.
 UNIT_DIR := /usr/lib/systemd/system
 
@@ -26,6 +45,10 @@ UNIT_FILES = $(AGENT_SERVICE)
 GENERATED_FILES := $(UNIT_FILES)
 # Target to be reached in systemd services
 UNIT_FILES += kata-containers.target
+endif
+
+ifeq ($(TRACE),yes)
+UNIT_FILES += jaeger-client-socat-redirector.service
 endif
 
 VERSION_FILE := ./VERSION
