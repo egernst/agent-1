@@ -34,8 +34,16 @@ ifeq ($(TRACE),yes)
   endif
 endif
 
+# If "yes", install additional services to redirect guest OS journal messages
+# to the host using VSOCK.
+TRACE_DEV_MODE := no
+
 # Path to systemd unit directory if installed as not init.
 UNIT_DIR := /usr/lib/systemd/system
+
+# Path to systemd drop-in snippet directory used to override the agent's
+# service without having to modify the pristine agent service file.
+SNIPPET_DIR := /etc/systemd/system/$(AGENT_SERVICE).d/
 
 GENERATED_FILES :=
 
@@ -49,6 +57,11 @@ endif
 
 ifeq ($(TRACE),yes)
 UNIT_FILES += jaeger-client-socat-redirector.service
+endif
+
+ifeq ($(TRACE_DEV_MODE),yes)
+UNIT_FILES += kata-journald-host-redirect.service
+SNIPPET_FILES += kata-redirect-agent-output-to-journal.conf
 endif
 
 VERSION_FILE := ./VERSION
@@ -82,6 +95,11 @@ install:
 ifeq ($(INIT),no)
 	@echo "Installing systemd unit files..."
 	$(foreach f,$(UNIT_FILES),$(call INSTALL_FILE,$f,$(UNIT_DIR)))
+endif
+ifeq ($(TRACE_DEV_MODE),yes)
+	@echo "Installing systemd snippet files..."
+	@mkdir -p $(SNIPPET_DIR)
+	$(foreach f,$(SNIPPET_FILES),$(call INSTALL_FILE,$f,$(SNIPPET_DIR)))
 endif
 
 build-image:
