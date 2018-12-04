@@ -102,33 +102,33 @@ type sandboxStorage struct {
 }
 
 type sandbox struct {
+	network     network
+	sharedPidNs namespace
+	sharedUTSNs namespace
+	sharedIPCNs namespace
+	mounts      []string
 	sync.RWMutex
 	ctx context.Context
 
-	id          string
-	hostname    string
-	containers  map[string]*container
-	channel     channel
-	network     network
-	wg          sync.WaitGroup
-	sharedPidNs namespace
-	mounts      []string
-	subreaper   reaper
-	server      *grpc.Server
+	id         string
+	hostname   string
+	channel    channel
+	subreaper  reaper
+	containers map[string]*container
+	server     *grpc.Server
 
 	// Set when server needs to be shut down
 	shutdown chan bool
 
 	pciDeviceMap      map[string]string
 	deviceWatchers    map[string](chan string)
-	sharedUTSNs       namespace
-	sharedIPCNs       namespace
 	guestHooks        *specs.Hooks
+	storages          map[string]*sandboxStorage
+	wg                sync.WaitGroup
 	guestHooksPresent bool
 	running           bool
 	noPivotRoot       bool
 	sandboxPidNs      bool
-	storages          map[string]*sandboxStorage
 }
 
 var agentFields = logrus.Fields{
@@ -1270,6 +1270,7 @@ func realMain(ctx context.Context) error {
 }
 
 func main() {
+
 	// create a new empty context
 	ctx := context.Background()
 
