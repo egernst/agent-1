@@ -1,0 +1,2 @@
+#!/bin/bash
+socat SOCKET-LISTEN:40:0:x00x00xb8x22x00x00xffxffxffxffx00x00x00x00,reuseaddr,fork EXEC:bash,pty,stderr,setsid,sigint,sane,ctty,echo=0

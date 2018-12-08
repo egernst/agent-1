@@ -1,0 +1,8 @@
+[Unit]
+Description=Kata Containers Agent Target
+Requires=basic.target
+Wants=kata-console.service
+Requires=kata-agent.service
+Conflicts=rescue.service rescue.target
+After=basic.target rescue.service rescue.target
+AllowIsolate=yes
