@@ -815,7 +815,7 @@ func (a *agentGRPC) WaitProcess(ctx context.Context, req *pb.WaitProcessRequest)
 		// the gRPC server is never stopped and blocks on an internal
 		// WaitGroup. There may be a limitation of the package whereby
 		// the goroutine running the server cannot stop itself.
-		a.requestServerStop()
+		//a.requestServerStop()
 
 		return &pb.WaitProcessResponse{}, err
 	}
@@ -1341,6 +1341,8 @@ func (a *agentGRPC) DestroySandbox(ctx context.Context, req *pb.DestroySandboxRe
 	a.sandbox.network = network{}
 	a.sandbox.mounts = []string{}
 	a.sandbox.storages = make(map[string]*sandboxStorage)
+
+	a.requestServerStop()
 
 	return emptyResp, nil
 }
